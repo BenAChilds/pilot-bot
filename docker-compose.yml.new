@@ -1,0 +1,12 @@
+services:
+  discord-bot:
+    image: discord-bot
+    build: .
+    container_name: discord-bot-container
+    restart: unless-stopped
+    environment:
+      - DISCORD_TOKEN=
+      - WELCOME_CHANNEL_ID=
+      - RULES_CHANNEL_ID=
+      - RULES_MESSAGE_ID=
+      - RESTRICTED_ROLES=Comma,Separated,Role,Names
