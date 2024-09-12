@@ -245,7 +245,7 @@ async def metar(ctx, station: str):
 @bot.command()
 async def atis(ctx, station: str):
     # Check if the station starts with 'Y' (for Australian airports)
-    if not station.startswith('Y') or len(station) != 4:
+    if not station.lower().startswith('y') or len(station) != 4:
         await ctx.send("Error: Only Australian airports (starting with 'Y') are supported at this time.")
         return
 
