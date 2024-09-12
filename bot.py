@@ -108,52 +108,48 @@ async def add_role(ctx, role_name):
     role_lookup = {role.name.lower(): role for role in ctx.guild.roles}
 
     # Check if the role exists by matching the lowercase name
-    member_role = role_lookup.get(role_name_lower)
+    requested_role = role_lookup.get(role_name_lower)
 
-    if member_role is None:
+    if requested_role is None:
         await ctx.send(f"Sorry, the role '{role_name}' does not exist.")
         return
 
-    if member_role.name in RESTRICTED_ROLES:
+    if requested_role.name in RESTRICTED_ROLES:
         await ctx.send(f"The role '{role_name}' cannot be added.")
         return
 
-    if member_role in member.roles:
+    if requested_role in member.roles:
         await ctx.send(f"You already have the role '{role_name}'.")
         return
 
     # Special case for 'ATC'
-    if member_role.name == 'ATC':
-        # Add 'ATC' role without removing any other roles
-        await member.add_roles(member_role)
-        await ctx.send(f"Added role '{member_role.name}' to {member.mention}.")
+    if requested_role.name == 'ATC':
+        await member.add_roles(requested_role)
+        await ctx.send(f"Added role '{requested_role.name}' to {member.mention}.")
         return
 
     # Check for higher roles and remove lower roles
     higher_role = None
     for role in member.roles:
-        if role.position < member_role.position and role.name not in RESTRICTED_ROLES:
+        if role.position < requested_role.position and role.name not in RESTRICTED_ROLES:
             higher_role = role
 
     if higher_role:
-        # Check if 'RPC' is present and should not be removed
-        if 'RPC' in [r.name for r in member.roles] and role_name != 'RPC':
-            # Do not remove 'RPC'
+        if 'RPC' in [r.name for r in member.roles] and requested_role.name != 'RPC':
             if higher_role.name != 'RPC':
                 await member.remove_roles(higher_role)
                 await ctx.send(f"Removed lower role '{higher_role.name}'.")
-        else:
-            await member.remove_roles(higher_role)
-            await ctx.send(f"Removed lower role '{higher_role.name}'.")
 
-    # If the user has no roles (excluding the '@everyone' role), add the 'Member' role
-    if len(member.roles) <= 1 and member_role is not None:
-        await member.add_roles(member_role)
-        await ctx.send(f"Assigned 'Member' role to {member.mention}.")
+    # Assign 'Member' role if user has no other roles
+    if len(member.roles) <= 1:  # @everyone is always present
+        member_role = role_lookup.get('member')
+        if member_role is not None:
+            await member.add_roles(member_role)
+            await ctx.send(f"Assigned 'Member' role to {member.mention}.")
 
     # Add the requested role
-    await member.add_roles(member_role)
-    await ctx.send(f"Added role '{member_role.name}' to {member.mention}.")
+    await member.add_roles(requested_role)
+    await ctx.send(f"Added role '{requested_role.name}' to {member.mention}.")
 
 
 # Helper function to remove a role
