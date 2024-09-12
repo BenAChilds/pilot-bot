@@ -225,7 +225,7 @@ async def metar(ctx, station: str):
         response = requests.get(url, params=params)
         
         # Check for a successful request
-        if response.status_code == 200:
+        if response.status_code == 200 and response.text.not_empty():
             metar_data = response.text  # This will give us the raw METAR data
             
             # Create an embed to return the METAR data
