@@ -150,7 +150,6 @@ async def add_role(ctx, role_name):
     if len(member.roles) <= 1 and member_role is not None:
         await member.add_roles(member_role)
         await ctx.send(f"Assigned 'Member' role to {member.mention}.")
-        return
 
     # Add the requested role
     await member.add_roles(member_role)
