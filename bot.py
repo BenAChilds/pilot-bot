@@ -247,6 +247,49 @@ async def metar(ctx, station: str):
     except requests.RequestException as e:
         # Handle request exceptions (e.g., timeouts or connectivity issues)
         await ctx.send(f"Error: Failed to retrieve METAR data due to a network issue. {e}")
+
+@bot.command()
+async def taf(ctx, station: str):
+    # Ensure input is up to 4 alphanumeric characters
+    if not station.isalnum() or len(station) > 4:
+        await ctx.send("Error: Please provide a valid 4-character station identifier.")
+        return
+    
+    # Prepare the URL and query parameters
+    url = "https://aviationweather.gov/api/data/metar"
+    params = {
+        "ids": station.upper(),
+        "format": "raw",
+        "taf": "true"
+    }
+    
+    try:
+        # Make the GET request to the aviationweather API
+        response = requests.get(url, params=params)
+        
+        # Check if the request was successful
+        if response.status_code == 200:
+            # Parse the response data
+            metar_data = response.text.strip()
+
+            # Check if the TAF data is empty or missing
+            if not metar_data:
+                await ctx.send(f"Error: No TAF data available for {station.upper()}.")
+            else:
+                # Send METAR data in an embed
+                embed = discord.Embed(
+                    title=f"TAF for {station.upper()}",
+                    description=f"```{metar_data}```",
+                    color=discord.Color.orange()
+                )
+                await ctx.send(embed=embed)
+        else:
+            # Handle non-200 responses
+            await ctx.send(f"Error: Could not retrieve TAF for {station.upper()}. (HTTP {response.status_code})")
+    
+    except requests.RequestException as e:
+        # Handle request exceptions (e.g., timeouts or connectivity issues)
+        await ctx.send(f"Error: Failed to retrieve TAF data due to a network issue. {e}")
         
 @bot.command()
 async def atis(ctx, station: str):
