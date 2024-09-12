@@ -279,22 +279,33 @@ async def atis(ctx, station: str):
 
         # Check if the request was successful
         if response.status_code == 200:
-            # Parse the response XML to check for errors
-            root = ET.fromstring(response.text)
-            # Look for the 'info' tag in case of an error
-            info_tag = root.find('.//{http://www.airservicesaustralia.com/naips/xsd}info')
-            if info_tag is not None:
-                error_message = info_tag.text
-                await ctx.send(f"Error: {error_message}")
-            else:
-                # No error found, send the ATIS data
-                atis_data = response.text
-                embed = discord.Embed(
-                    title=f"ATIS for {station.upper()}",
-                    description=atis_data,
-                    color=discord.Color.green()
-                )
-                await ctx.send(embed=embed)
+            try:
+                # Parse the response XML to extract the content
+                root = ET.fromstring(response.text)
+                content_tag = root.find('.//{http://www.airservicesaustralia.com/naips/xsd}content')
+
+                if content_tag is not None:
+                    content = content_tag.text
+
+                    # Extract the part starting from "ATIS"
+                    atis_index = content.find("ATIS")
+                    if atis_index != -1:
+                        atis_content = content[atis_index:].strip()  # Strip unnecessary spaces and tags
+
+                        # Send the extracted ATIS information
+                        embed = discord.Embed(
+                            title=f"ATIS for {station.upper()}",
+                            description=f"```{atis_content}```",
+                            color=discord.Color.green()
+                        )
+                        await ctx.send(embed=embed)
+                    else:
+                        await ctx.send(f"Error: No ATIS found in the response for {station.upper()}.")
+                else:
+                    await ctx.send(f"Error: No ATIS content found for {station.upper()}.")
+
+            except ET.ParseError:
+                await ctx.send("Error: Failed to parse the ATIS response.")
         else:
             # Handle non-200 responses
             await ctx.send(f"Error: Could not retrieve ATIS for {station.upper()}. (HTTP {response.status_code})")
