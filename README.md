@@ -46,17 +46,17 @@ This project is a Discord bot designed to manage user roles within a server. It 
 
     Copy your bot's token and use it in the next step.
 
-2. **Set up environment variables:**
+3. **Set up environment variables:**
 
     Renamed `docker-compose.yml.new` to `docker-compose.yml` and update the environment variables with your values.
 
     The role `@everyone` is statically restricted, but any additional roles can be set via the `RESTRICTED_ROLES` environment variable.
 
-3. **Create your welcome message**
+4. **Create your welcome message**
 
     Rename `welcome_message.md.new` to `welcome_message.md` and update the file with the message you want to show your users when they join your server.
 
-4. **Run the bot:**
+5. **Run the bot:**
 
     On Windows, open a terminal in the directory containing the code and run `.\rebuild.bat`.
     On Linux or Mac, open a terminal in the directory and run `./rebuild.sh`.
