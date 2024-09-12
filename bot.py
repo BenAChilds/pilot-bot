@@ -1,5 +1,6 @@
 import os
 import discord
+import requests
 from discord.ext import commands
 import logging
 
@@ -202,6 +203,44 @@ async def ban_user_error(ctx, error):
         await ctx.send("You do not have the required roles to use this command.")
     else:
         await ctx.send("An error occurred while trying to ban the user.")
+        
+@bot.command()
+async def metar(ctx, station: str):
+    # Ensure input is up to 4 alphanumeric characters
+    if not station.isalnum() or len(station) > 4:
+        await ctx.send("Error: Please provide a valid 4-character station identifier.")
+        return
+    
+    # Prepare the URL and query parameters
+    url = "https://aviationweather.gov/api/data/metar"
+    params = {
+        "ids": station.upper(),
+        "format": "raw",
+        "taf": "false"
+    }
+    
+    try:
+        # Make the GET request to the aviationweather API
+        response = requests.get(url, params=params)
+        
+        # Check for a successful request
+        if response.status_code == 200:
+            metar_data = response.text  # This will give us the raw METAR data
+            
+            # Create an embed to return the METAR data
+            embed = discord.Embed(
+                title=f"METAR for {station.upper()}",
+                description=metar_data,
+                color=discord.Color.blue()
+            )
+            await ctx.send(embed=embed)
+        else:
+            # Handle errors or non-200 responses
+            await ctx.send(f"Error: Could not retrieve METAR for {station.upper()}. (HTTP {response.status_code})")
+    
+    except requests.RequestException as e:
+        # Handle request exceptions (like timeouts or connectivity issues)
+        await ctx.send(f"Error: Failed to retrieve data due to network issue. {e}")
 
 # Load Discord token from environment variable
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
