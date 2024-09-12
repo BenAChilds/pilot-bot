@@ -246,7 +246,7 @@ async def metar(ctx, station: str):
 async def atis(ctx, station: str):
     # Check if the station starts with 'Y' (for Australian airports)
     if not station.lower().startswith('y') or len(station) != 4:
-        await ctx.send("Error: Only Australian airports (starting with 'Y') are supported at this time.")
+        await ctx.send("Error: Only Australian airports (starting with 'Y') are currently supported.")
         return
 
     # Construct the SOAP request body
@@ -278,14 +278,22 @@ async def atis(ctx, station: str):
 
         # Check if the request was successful
         if response.status_code == 200:
-            # Extract the body and display it as an embed
-            atis_data = response.text
-            embed = discord.Embed(
-                title=f"ATIS for {station.upper()}",
-                description=atis_data,
-                color=discord.Color.green()
-            )
-            await ctx.send(embed=embed)
+            # Parse the response XML to check for errors
+            root = ET.fromstring(response.text)
+            # Look for the 'info' tag in case of an error
+            info_tag = root.find('.//{http://www.airservicesaustralia.com/naips/xsd}info')
+            if info_tag is not None:
+                error_message = info_tag.text
+                await ctx.send(f"Error: {error_message}")
+            else:
+                # No error found, send the ATIS data
+                atis_data = response.text
+                embed = discord.Embed(
+                    title=f"ATIS for {station.upper()}",
+                    description=atis_data,
+                    color=discord.Color.green()
+                )
+                await ctx.send(embed=embed)
         else:
             # Handle non-200 responses
             await ctx.send(f"Error: Could not retrieve ATIS for {station.upper()}. (HTTP {response.status_code})")
