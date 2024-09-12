@@ -290,7 +290,8 @@ async def atis(ctx, station: str):
                     # Extract the part starting from "ATIS"
                     atis_index = content.find("ATIS")
                     if atis_index != -1:
-                        atis_content = content[atis_index:].strip()  # Strip unnecessary spaces and tags
+                        # Strip leading and trailing whitespace from the ATIS content
+                        atis_content = content[atis_index:].lstrip()  # Removes only leading whitespace
 
                         # Send the extracted ATIS information
                         embed = discord.Embed(
