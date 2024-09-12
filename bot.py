@@ -1,6 +1,7 @@
 import os
 import discord
 import requests
+import xml.etree.ElementTree as ET
 from discord.ext import commands
 import logging
 
