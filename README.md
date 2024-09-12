@@ -6,7 +6,7 @@ This project is a Discord bot designed to manage user roles within a server. It 
 
 - Add roles to users via commands.
 - Enforce role restrictions (`@everyone` and configurable roles via an environment variable).
-- Handle special cases, such as keeping the `RPC` role if it's already assigned.
+- Handle special cases, such as keeping the `RPC` role if it's already assigned (This will be more customisable in the future).
 - Check and manage role hierarchy, removing lower roles when a higher role is added.
 - Supports dynamic management of restricted roles through environment variables.
 
@@ -30,7 +30,7 @@ This project is a Discord bot designed to manage user roles within a server. It 
 
     ```bash
     git clone https://github.com/BenAChilds/pilot-bot.git
-    cd discord-role-bot
+    cd pilot-bot
     ```
 
 2. **Create a Discord Developer bot**
