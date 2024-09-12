@@ -241,10 +241,67 @@ async def metar(ctx, station: str):
     except requests.RequestException as e:
         # Handle request exceptions (like timeouts or connectivity issues)
         await ctx.send(f"Error: Failed to retrieve data due to network issue. {e}")
+        
+@bot.command()
+async def atis(ctx, station: str):
+    # Check if the station starts with 'Y' (for Australian airports)
+    if not station.startswith('Y') or len(station) != 4:
+        await ctx.send("Error: Only Australian airports (starting with 'Y') are supported at this time.")
+        return
 
-# Load Discord token from environment variable
+    # Construct the SOAP request body
+    soap_request = f'''<?xml version="1.0" encoding="UTF-8"?>
+    <SOAP-ENV:Envelope
+        xmlns:ns0="http://schemas.xmlsoap.org/soap/envelope/"
+        xmlns:ns1="http://www.airservicesaustralia.com/naips/xsd"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/">
+        <SOAP-ENV:Header/>
+        <ns0:Body>
+            <ns1:loc-brief-rqs password="{AIRSERVICES_PASSWORD}" requestor="{AIRSERVICES_USERNAME}" source="atis">
+                <ns1:loc>{station.upper()}</ns1:loc>
+                <ns1:flags met="true"/>
+            </ns1:loc-brief-rqs>
+        </ns0:Body>
+    </SOAP-ENV:Envelope>'''
+
+    try:
+        # Make the SOAP request to the AirServices API
+        response = requests.post(
+            AIRSERVICES_URL,
+            headers={
+                'Content-Type': 'text/xml; charset=utf-8',
+                'SOAPAction': ''
+            },
+            data=soap_request
+        )
+
+        # Check if the request was successful
+        if response.status_code == 200:
+            # Extract the body and display it as an embed
+            atis_data = response.text
+            embed = discord.Embed(
+                title=f"ATIS for {station.upper()}",
+                description=atis_data,
+                color=discord.Color.green()
+            )
+            await ctx.send(embed=embed)
+        else:
+            # Handle non-200 responses
+            await ctx.send(f"Error: Could not retrieve ATIS for {station.upper()}. (HTTP {response.status_code})")
+    
+    except requests.RequestException as e:
+        # Handle request exceptions (like timeouts or connectivity issues)
+        await ctx.send(f"Error: Failed to retrieve ATIS data due to network issue. {e}")
+
+# Load from environment variable
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 WELCOME_CHANNEL_ID = os.getenv('WELCOME_CHANNEL_ID')
+# Get the AirServices Australia credentials from environment variables
+AIRSERVICES_USERNAME = os.getenv("AIRSERVICES_USERNAME")
+AIRSERVICES_PASSWORD = os.getenv("AIRSERVICES_PASSWORD")
+# Base URL for the AirServices Australia SOAP service
+AIRSERVICES_URL = "https://www.airservicesaustralia.com/naips/briefing-service?wsdl"
 
 if DISCORD_TOKEN is None:
     raise ValueError("No Discord token provided. Set the DISCORD_TOKEN environment variable.")
