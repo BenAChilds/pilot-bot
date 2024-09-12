@@ -224,24 +224,29 @@ async def metar(ctx, station: str):
         # Make the GET request to the aviationweather API
         response = requests.get(url, params=params)
         
-        # Check for a successful request
-        if response.status_code == 200 and response.text.not_empty():
-            metar_data = response.text  # This will give us the raw METAR data
-            
-            # Create an embed to return the METAR data
-            embed = discord.Embed(
-                title=f"METAR for {station.upper()}",
-                description=metar_data,
-                color=discord.Color.blue()
-            )
-            await ctx.send(embed=embed)
+        # Check if the request was successful
+        if response.status_code == 200:
+            # Parse the response data
+            metar_data = response.text.strip()
+
+            # Check if the METAR data is empty or missing
+            if not metar_data:
+                await ctx.send(f"Error: No METAR data available for {station.upper()}.")
+            else:
+                # Send METAR data in an embed
+                embed = discord.Embed(
+                    title=f"METAR for {station.upper()}",
+                    description=f"```{metar_data}```",
+                    color=discord.Color.blue()
+                )
+                await ctx.send(embed=embed)
         else:
-            # Handle errors or non-200 responses
+            # Handle non-200 responses
             await ctx.send(f"Error: Could not retrieve METAR for {station.upper()}. (HTTP {response.status_code})")
     
     except requests.RequestException as e:
-        # Handle request exceptions (like timeouts or connectivity issues)
-        await ctx.send(f"Error: Failed to retrieve data due to network issue. {e}")
+        # Handle request exceptions (e.g., timeouts or connectivity issues)
+        await ctx.send(f"Error: Failed to retrieve METAR data due to a network issue. {e}")
         
 @bot.command()
 async def atis(ctx, station: str):
