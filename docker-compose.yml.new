@@ -10,3 +10,5 @@ services:
       - RULES_CHANNEL_ID=
       - RULES_MESSAGE_ID=
       - RESTRICTED_ROLES=Comma,Separated,Role,Names
+	  - AIRSERVICES_USERNAME=
+	  - AIRSERVICES_PASSWORD=

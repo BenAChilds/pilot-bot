@@ -1,6 +1,7 @@
 # Discord Role Management Bot
 
 This project is a Discord bot designed to manage user roles within a server. It provides functionality to add and remove roles while adhering to specific restrictions such as not allowing certain roles to be added or removed, and maintaining correct role hierarchy. Additionally, it allows for configurable restricted roles via environment variables.
+Additionally, it provides some aviation related functions.
 
 ## Features
 
@@ -12,8 +13,8 @@ This project is a Discord bot designed to manage user roles within a server. It 
 
     ### Planned Features
 
-    - Aviation Weather retrieval
-    - Australian ATIS retrieval
+    - ~Aviation Weather retrieval~
+    - ~Australian ATIS retrieval~
     - IFR route planning
     - VFR route planning
 

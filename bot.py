@@ -1,7 +1,10 @@
 import os
+import re
 import discord
 import pytz
+import requests
 from datetime import datetime, timezone, timedelta
+import xml.etree.ElementTree as ET
 from discord.ext import commands
 import logging
 
@@ -249,10 +252,309 @@ async def time_command(ctx, timezone_id: str="Zulu"):
     """
     time_in_tz = get_current_time_in_timezone(timezone_id)
     await ctx.send(f"The current time in {timezone_id} is: {time_in_tz}")
+        
+def parse_conditions(metar_text):
+    # Default conditions
+    visibility = None
+    ceiling = None
+    # Regex for extracting visibility (e.g. 9999 or 10SM)
+    vis_match = re.search(r'(\d{4})SM|\b(\d{4})\b', metar_text)
+    if vis_match:
+        visibility_str = vis_match.group(1) or vis_match.group(2)
+        visibility = int(visibility_str)
+        # Convert statute miles to meters if visibility is in SM
+        if vis_match.group(1):
+            visibility *= 1609.34
 
-# Load Discord token from environment variable
+    # Regex for extracting cloud cover (e.g. BKN013, OVC025)
+    cloud_matches = re.findall(r'\b(BKN|OVC|SCT|FEW)(\d{3})\b', metar_text)
+    if cloud_matches:
+        ceiling = min(int(cloud[1]) * 100 for cloud in cloud_matches)  # Convert to feet and get the lowest ceiling
+    
+    return visibility, ceiling
+
+def determine_flight_rules(visibility, ceiling):
+    if visibility is not None and ceiling is not None:
+        # Convert visibility from meters to statute miles
+        vis_sm = visibility / 1609.34
+        
+        # Debugging print statements
+        print(f"Visibility (meters): {visibility}")
+        print(f"Visibility (statute miles): {vis_sm}")
+        print(f"Ceiling (feet): {ceiling}")
+
+        if vis_sm >= 5 and ceiling >= 3000:
+            return 'VFR', discord.Color.green()
+        elif vis_sm >= 3 and ceiling >= 1000:
+            return 'MVFR', discord.Color.blue()
+        elif vis_sm >= 1 and ceiling >= 500:
+            return 'IFR', discord.Color.red()
+        else:
+            return 'LIFR', discord.Color.purple()
+    
+    return 'Unknown', discord.Color.default()
+        
+def get_airservices_soap_request(station):
+    return f'''<?xml version="1.0" encoding="UTF-8"?>
+    <SOAP-ENV:Envelope
+        xmlns:ns0="http://schemas.xmlsoap.org/soap/envelope/"
+        xmlns:ns1="http://www.airservicesaustralia.com/naips/xsd"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/">
+        <SOAP-ENV:Header/>
+        <ns0:Body>
+            <ns1:loc-brief-rqs password="{AIRSERVICES_PASSWORD}" requestor="{AIRSERVICES_USERNAME}" source="atis">
+                <ns1:loc>{station.upper()}</ns1:loc>
+                <ns1:flags met="true"/>
+            </ns1:loc-brief-rqs>
+        </ns0:Body>
+    </SOAP-ENV:Envelope>'''
+        
+@bot.command()
+async def brief(ctx, station: str):
+    # Check if the station starts with 'Y' (for Australian airports)
+    if not station.lower().startswith('y') or len(station) != 4:
+        await ctx.send("Error: Only Australian airports (starting with 'Y') are supported.")
+        return
+
+    # Construct the SOAP request body
+    soap_request = get_airservices_soap_request(station.upper())
+
+    try:
+        # Make the SOAP request to the AirServices API
+        response = requests.post(
+            AIRSERVICES_URL,
+            headers={
+                'Content-Type': 'text/xml; charset=utf-8',
+                'SOAPAction': ''
+            },
+            data=soap_request
+        )
+
+        # Check if the request was successful
+        if response.status_code == 200:
+            # Parse the response XML to extract the <content> tag
+            root = ET.fromstring(response.text)
+            content = root.find('.//{http://www.airservicesaustralia.com/naips/xsd}content')
+
+            if content is not None:
+                # Extract text content
+                atis_data = content.text
+
+                # Replace AIRSERVICES_USERNAME with the user's display name
+                atis_data = atis_data.replace(AIRSERVICES_USERNAME, ctx.author.display_name)
+
+                # Create and send the embed with the updated content
+                embed = discord.Embed(
+                    title=f"Location Briefing for {station.upper()}",
+                    description="NOTE: Not for flight planning purposes. Simulation use only.\n\n" + atis_data,
+                    color=discord.Color.orange()
+                )
+                await ctx.send(embed=embed)
+            else:
+                await ctx.send("Error: Unable to retrieve briefing content.")
+        else:
+            # Handle non-200 responses
+            await ctx.send(f"Error: Could not retrieve briefing for {station.upper()}. (HTTP {response.status_code})")
+    
+    except requests.RequestException as e:
+        # Handle request exceptions (like timeouts or connectivity issues)
+        await ctx.send(f"Error: Failed to retrieve briefing data due to network issue. {e}")
+        
+@bot.command()
+async def metar(ctx, station: str):
+    if not station.lower().startswith('y') or len(station) != 4:
+        # Handle non-Australian stations
+        try:
+            response = requests.get(
+                'https://aviationweather.gov/api/data/metar',
+                params={'ids': station, 'format': 'raw'}
+            )
+
+            if response.status_code == 200:
+                metar_data = response.text
+                
+                # Parse visibility and ceiling
+                visibility, ceiling = parse_conditions(metar_data)
+
+                # Determine flight rules and embed color
+                flight_rules, color = determine_flight_rules(visibility, ceiling)
+
+                embed = discord.Embed(
+                    title=f"METAR for {station.upper()}",
+                    description=f"{metar_data}\n\nFlight Conditions: **{flight_rules}**",
+                    color=color
+                )
+                await ctx.send(embed=embed)
+            else:
+                await ctx.send(f"Error: Could not retrieve METAR for {station.upper()}. (HTTP {response.status_code})")
+
+        except requests.RequestException as e:
+            await ctx.send(f"Error: Failed to retrieve METAR data due to network issue. {e}")
+        return
+
+    soap_request = get_airservices_soap_request(station.upper())
+
+    try:
+        response = requests.post(AIRSERVICES_URL, headers={'Content-Type': 'text/xml; charset=utf-8'}, data=soap_request)
+        if response.status_code == 200:
+            root = ET.fromstring(response.text)
+            content = root.find('.//{http://www.airservicesaustralia.com/naips/xsd}content')
+
+            if content is not None:
+                metar_data = content.text
+                metar_data = metar_data.replace(AIRSERVICES_USERNAME, ctx.author.display_name)
+
+                # Filter only METAR and optional SPECI from the text
+                metar_section = "\n".join([line for line in metar_data.splitlines() if "METAR" in line or "SPECI" in line])
+                
+                # Parse visibility and ceiling
+                visibility, ceiling = parse_conditions(metar_section)
+
+                # Determine flight rules and embed color
+                flight_rules, color = determine_flight_rules(visibility, ceiling)
+
+                embed = discord.Embed(title=f"METAR for {station.upper()}", description=f"{metar_section}\n\nFlight Conditions: **{flight_rules}**", color=color)
+                await ctx.send(embed=embed)
+            else:
+                await ctx.send("Error: Unable to retrieve METAR data.")
+        else:
+            await ctx.send(f"Error: Could not retrieve METAR for {station.upper()}. (HTTP {response.status_code})")
+    
+    except requests.RequestException as e:
+        await ctx.send(f"Error: Failed to retrieve METAR data due to network issue. {e}")
+        
+@bot.command()
+async def taf(ctx, station: str):
+    if not station.lower().startswith('y') or len(station) != 4:
+        # Handle non-Australian stations
+        try:
+            response = requests.get(
+                'https://aviationweather.gov/api/data/taf',
+                params={'ids': station, 'format': 'raw'}
+            )
+
+            if response.status_code == 200:
+                taf_data = response.text
+                
+                # Parse visibility and ceiling
+                visibility, ceiling = parse_conditions(taf_data)
+
+                # Determine flight rules and embed color
+                flight_rules, color = determine_flight_rules(visibility, ceiling)
+
+                embed = discord.Embed(
+                    title=f"TAF for {station.upper()}",
+                    description=f"{taf_data}\n\nFlight Conditions: **{flight_rules}**",
+                    color=color
+                )
+                await ctx.send(embed=embed)
+            else:
+                await ctx.send(f"Error: Could not retrieve TAF for {station.upper()}. (HTTP {response.status_code})")
+        except requests.RequestException as e:
+            await ctx.send(f"Error: Failed to retrieve TAF data due to network issue. {e}")
+        return
+
+    soap_request = get_airservices_soap_request(station.upper())
+
+    try:
+        response = requests.post(AIRSERVICES_URL, headers={'Content-Type': 'text/xml; charset=utf-8'}, data=soap_request)
+        if response.status_code == 200:
+            root = ET.fromstring(response.text)
+            content = root.find('.//{http://www.airservicesaustralia.com/naips/xsd}content')
+
+            if content is not None:
+                taf_data = content.text
+                taf_data = taf_data.replace(AIRSERVICES_USERNAME, ctx.author.display_name)
+                
+                 # Filter only METAR and optional SPECI from the text
+                metar_section = "\n".join([line for line in taf_data.splitlines() if "METAR" in line or "SPECI" in line])
+                
+                # Parse visibility and ceiling
+                visibility, ceiling = parse_conditions(metar_section)
+
+                # Determine flight rules and embed color
+                flight_rules, color = determine_flight_rules(visibility, ceiling)
+
+                # Filter to capture TAF section and weather conditions after it
+                lines = taf_data.splitlines()
+                taf_section = []
+                capturing_taf = False
+
+                for line in lines:
+                    if "TAF" in line:
+                        capturing_taf = True
+                    if capturing_taf:
+                        # Stop capturing once the ATIS, METAR, or SPECI section begins
+                        if any(keyword in line for keyword in ["METAR", "SPECI", "ATIS"]):
+                            break
+                        taf_section.append(line)
+
+                taf_text = "\n".join(taf_section)
+
+                embed = discord.Embed(title=f"TAF for {station.upper()}", description=f"{taf_text}\n\nFlight Conditions: **{flight_rules}**", color=color)
+                await ctx.send(embed=embed)
+            else:
+                await ctx.send("Error: Unable to retrieve TAF data.")
+        else:
+            await ctx.send(f"Error: Could not retrieve TAF for {station.upper()}. (HTTP {response.status_code})")
+    
+    except requests.RequestException as e:
+        await ctx.send(f"Error: Failed to retrieve TAF data due to network issue. {e}")
+        
+@bot.command()
+async def atis(ctx, station: str):
+    if not station.lower().startswith('y') or len(station) != 4:
+        await ctx.send("Error: Only Australian airports (starting with 'Y') are supported.")
+        return
+
+    soap_request = get_airservices_soap_request(station.upper())
+
+    try:
+        response = requests.post(AIRSERVICES_URL, headers={'Content-Type': 'text/xml; charset=utf-8'}, data=soap_request)
+        if response.status_code == 200:
+            root = ET.fromstring(response.text)
+            content = root.find('.//{http://www.airservicesaustralia.com/naips/xsd}content')
+
+            if content is not None:
+                atis_data = content.text
+                atis_data = atis_data.replace(AIRSERVICES_USERNAME, ctx.author.display_name)
+
+                # Filter to capture ATIS section
+                lines = atis_data.splitlines()
+                atis_section = []
+                capturing_atis = False
+
+                for line in lines:
+                    if "ATIS" in line:
+                        capturing_atis = True
+                    if capturing_atis:
+                        # Stop capturing once another section like METAR, TAF, or SPECI starts
+                        if any(keyword in line for keyword in ["METAR", "TAF", "SPECI"]):
+                            break
+                        atis_section.append(line)
+
+                atis_text = "\n".join(atis_section)
+
+                embed = discord.Embed(title=f"ATIS for {station.upper()}", description=atis_text, color=discord.Color.orange())
+                await ctx.send(embed=embed)
+            else:
+                await ctx.send("Error: Unable to retrieve ATIS data.")
+        else:
+            await ctx.send(f"Error: Could not retrieve ATIS for {station.upper()}. (HTTP {response.status_code})")
+    
+    except requests.RequestException as e:
+        await ctx.send(f"Error: Failed to retrieve ATIS data due to network issue. {e}")
+
+
+# Load from environment variable
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 WELCOME_CHANNEL_ID = os.getenv('WELCOME_CHANNEL_ID')
+# Get the AirServices Australia credentials from environment variables
+AIRSERVICES_USERNAME = os.getenv("AIRSERVICES_USERNAME")
+AIRSERVICES_PASSWORD = os.getenv("AIRSERVICES_PASSWORD")
+# Base URL for the AirServices Australia SOAP service
+AIRSERVICES_URL = "https://www.airservicesaustralia.com/naips/briefing-service?wsdl"
 
 if DISCORD_TOKEN is None:
     raise ValueError("No Discord token provided. Set the DISCORD_TOKEN environment variable.")
