@@ -1,5 +1,7 @@
 import os
 import discord
+import pytz
+from datetime import datetime, timezone, timedelta
 from discord.ext import commands
 import logging
 
@@ -202,6 +204,51 @@ async def ban_user_error(ctx, error):
         await ctx.send("You do not have the required roles to use this command.")
     else:
         await ctx.send("An error occurred while trying to ban the user.")
+        
+def get_current_time_in_timezone(timezone_id: str) -> str:
+    """
+    Returns the current time in the specified timezone.
+
+    :param timezone_id: The timezone ID (e.g., 'Australia/Hobart', '+08:00', 'UTC', 'Zulu').
+    :return: The current time as a string in the format 'YYYY-MM-DD HH:MM:SS TZ'.
+    """
+    # Handle the 'Zulu' case
+    if timezone_id.lower() == 'zulu':
+        tz = pytz.utc
+        current_time = datetime.now(tz)
+        return current_time.strftime('%Y-%m-%d %H:%M:%S %Z')
+
+    # Handle UTC offset cases (e.g., +08:00, +8)
+    if timezone_id.startswith('+') or timezone_id.startswith('-'):
+        try:
+            # Normalize the offset format (e.g., +8 becomes +08:00)
+            if len(timezone_id) in [2, 3]:  # Handle +8 or +08
+                timezone_id = timezone_id.zfill(3) + ":00"
+            offset_hours, offset_minutes = map(int, timezone_id.split(':'))
+            offset = timedelta(hours=offset_hours, minutes=offset_minutes)
+            tz = timezone(offset)
+            current_time = datetime.now(tz)
+            return current_time.strftime('%Y-%m-%d %H:%M:%S %Z')
+        except Exception:
+            return "Invalid UTC offset format."
+
+    # Handle named timezones (e.g., Australia/Hobart, UTC)
+    try:
+        tz = pytz.timezone(timezone_id)
+        current_time = datetime.now(tz)
+        return current_time.strftime('%Y-%m-%d %H:%M:%S %Z')
+    except pytz.UnknownTimeZoneError:
+        return "Invalid timezone ID."
+    
+@bot.command(name='time')
+async def time_command(ctx, timezone_id: str="Zulu"):
+    """
+    Handles the !time command by returning the current time in the specified timezone.
+    
+    :param timezone_id: The timezone ID provided by the user (e.g., 'Australia/Hobart', '+8').
+    """
+    time_in_tz = get_current_time_in_timezone(timezone_id)
+    await ctx.send(f"The current time in {timezone_id} is: {time_in_tz}")
 
 # Load Discord token from environment variable
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
